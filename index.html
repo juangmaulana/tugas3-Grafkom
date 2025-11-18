@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulasi Hukum Kepler Three.js</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: sans-serif;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="info">
+        <h2>Simulasi Hukum Kepler</h2>
+        <p>Kuning: Matahari (Fokus)</p>
+        <p>Biru: Planet (Revolusi & Rotasi)</p>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- 1. Inisialisasi Scene, Kamera, dan Renderer ---
+        const scene = new THREE.Scene();
+        
+        // Menambahkan bintang-bintang latar belakang
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 1000;
+        const starPositions = new Float32Array(starCount * 3);
+        for(let i = 0; i < starCount * 3; i++) {
+            starPositions[i] = (Math.random() - 0.5) * 100;
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMaterial = new THREE.PointsMaterial({color: 0xffffff, size: 0.1});
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 20, 25); // Posisi kamera agak di atas
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Kontrol orbit (agar user bisa memutar kamera)
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // --- 2. Membuat Objek (Matahari & Planet) ---
+        
+        // Cahaya
+        const ambientLight = new THREE.AmbientLight(0x333333);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 2, 100);
+        scene.add(pointLight); // Cahaya berasal dari matahari
+
+        // Matahari (Kuning)
+        const sunGeo = new THREE.SphereGeometry(1.5, 32, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+        const sun = new THREE.Mesh(sunGeo, sunMat);
+        scene.add(sun);
+
+        // Planet (Biru - Bumi)
+        const planetGeo = new THREE.SphereGeometry(0.5, 32, 32);
+        const planetMat = new THREE.MeshStandardMaterial({ 
+            color: 0x2233ff,
+            roughness: 0.7,
+        });
+        const planet = new THREE.Mesh(planetGeo, planetMat);
+        scene.add(planet);
+
+        // Tambahkan sumbu bantu (opsional)
+        // const axesHelper = new THREE.AxesHelper( 5 );
+        // scene.add( axesHelper );
+
+        // --- 3. Variabel Hukum Kepler ---
+        
+        // Parameter Orbit Elips
+        const a = 10; // Semi-major axis (jarak terjauh rata-rata)
+        const e = 0.5; // Eksentrisitas (0 = lingkaran, mendekati 1 = sangat lonjong)
+        // Agar efek kecepatan terlihat jelas, saya set eksentrisitas cukup tinggi (0.5)
+        
+        let theta = 0; // Sudut saat ini (True Anomaly)
+        
+        // Menggambar Garis Orbit (Visualisasi Lintasan)
+        const orbitPoints = [];
+        const segments = 128;
+        for (let i = 0; i <= segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+            // Rumus polar elips: r = a(1-e^2) / (1 + e*cos(angle))
+            const r = (a * (1 - e * e)) / (1 + e * Math.cos(angle));
+            
+            // Matahari ada di salah satu titik fokus (bukan di tengah 0,0)
+            // Dalam koordinat polar dengan fokus di origin, rumusnya sudah menangani posisi fokus.
+            // Namun agar visualnya pas di tengah scene, kita perlu offset jika mau. 
+            // Tapi menurut hukum Kepler, matahari ada di FOKUS, jadi biarkan matahari di (0,0,0).
+            
+            const x = r * Math.cos(angle);
+            const z = r * Math.sin(angle);
+            orbitPoints.push(new THREE.Vector3(x, 0, z));
+        }
+        const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+        const orbitMat = new THREE.LineBasicMaterial({ color: 0x555555 });
+        const orbitLine = new THREE.Line(orbitGeo, orbitMat);
+        scene.add(orbitLine);
+
+        // --- 4. Loop Animasi ---
+        
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // --- A. Hitung Posisi Revolusi (Kepler) ---
+            
+            // 1. Hitung radius (jarak) saat ini berdasarkan sudut theta
+            // Rumus: r = a(1-e^2) / (1 + e cos(θ))
+            const r = (a * (1 - e * e)) / (1 + e * Math.cos(theta));
+
+            // 2. Update posisi Planet
+            planet.position.x = r * Math.cos(theta);
+            planet.position.z = r * Math.sin(theta);
+
+            // 3. Update Sudut (Theta) untuk frame berikutnya
+            // Hukum Kepler 2: Luas sapuan sama dalam waktu sama.
+            // Artinya kecepatan sudut (dθ/dt) berbanding terbalik dengan kuadrat jarak (r^2).
+            // Semakin dekat (r kecil), semakin cepat sudut bertambah.
+            const orbitalSpeedConstant = 0.05; // Konstanta kecepatan dasar
+            const dTheta = orbitalSpeedConstant / (r * r); 
+            theta += dTheta;
+
+            // --- B. Rotasi Planet (Spin) ---
+            planet.rotation.y += 0.02; // Rotasi konstan pada porosnya
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Handle Resize Window
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
