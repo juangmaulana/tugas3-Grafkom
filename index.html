@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tata Surya Cerah - Hukum Kepler</title>
+    <title>Hukum Kepler</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         #info {
@@ -73,6 +73,13 @@
         controls.enableDamping = true;
         controls.maxDistance = 500;
 
+        // Event listener untuk deteksi pergerakan kamera oleh user
+        controls.addEventListener('start', () => {
+            if (isFollowingPlanet) {
+                userHasMovedCamera = true;
+            }
+        });
+
         // --- Raycaster untuk deteksi klik ---
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
@@ -84,6 +91,7 @@
         let currentZoomedObject = null;
         let isFollowingPlanet = false;
         let followOffset = new THREE.Vector3();
+        let userHasMovedCamera = false;
 
         // --- PENCAHAYAAN ---
         scene.add(new THREE.AmbientLight(0x555555)); 
@@ -187,12 +195,17 @@
             });
 
             // Jika sedang mengikuti planet, update posisi kamera
-            if (isFollowingPlanet && currentZoomedObject) {
+            if (isFollowingPlanet && currentZoomedObject && !userHasMovedCamera) {
                 const worldPos = new THREE.Vector3();
                 currentZoomedObject.getWorldPosition(worldPos);
                 
                 // Update posisi kamera dan target untuk mengikuti planet
                 camera.position.copy(worldPos).add(followOffset);
+                controls.target.copy(worldPos);
+            } else if (isFollowingPlanet && currentZoomedObject && userHasMovedCamera) {
+                // Jika user sudah menggerakkan kamera, hanya update target untuk mengikuti planet
+                const worldPos = new THREE.Vector3();
+                currentZoomedObject.getWorldPosition(worldPos);
                 controls.target.copy(worldPos);
             }
 
@@ -209,22 +222,31 @@
             // Tentukan jarak zoom berdasarkan ukuran objek (lebih jauh dari sebelumnya)
             let distance;
             if (object.userData.name === 'Matahari') {
-                distance = 25; // Lebih jauh dari 15
+                distance = 25;
             } else {
                 // Untuk planet, sesuaikan dengan size (lebih jauh)
                 const boundingSphere = object.geometry.boundingSphere;
-                distance = boundingSphere.radius * 10; // Lebih jauh dari 5
+                distance = boundingSphere.radius * 10;
             }
             
-            // Hitung posisi kamera baru
-            const direction = new THREE.Vector3();
-            direction.subVectors(camera.position, worldPos).normalize();
+            // Hitung arah dari matahari ke planet (untuk planet luar)
+            const directionFromSun = new THREE.Vector3();
+            directionFromSun.copy(worldPos).normalize();
             
+            // Buat offset kamera: sedikit ke atas dan ke belakang dari arah orbit
+            const upVector = new THREE.Vector3(0, 1, 0);
+            const sideVector = new THREE.Vector3();
+            sideVector.crossVectors(directionFromSun, upVector).normalize();
+            
+            // Posisi kamera: di atas dan sedikit ke samping planet
             const targetCameraPos = new THREE.Vector3();
-            targetCameraPos.copy(worldPos).add(direction.multiplyScalar(distance));
+            targetCameraPos.copy(worldPos);
+            targetCameraPos.add(upVector.multiplyScalar(distance * 0.5)); // Ke atas
+            targetCameraPos.add(sideVector.multiplyScalar(distance * 0.8)); // Ke samping
+            targetCameraPos.add(directionFromSun.multiplyScalar(distance * 0.3)); // Sedikit ke depan
             
             // Simpan offset untuk mengikuti planet
-            followOffset.copy(direction.multiplyScalar(distance));
+            followOffset.copy(targetCameraPos).sub(worldPos);
             
             // Animasi smooth zoom
             const startPos = camera.position.clone();
@@ -237,6 +259,7 @@
                     progress = 1;
                     // Aktifkan mode follow setelah animasi selesai
                     isFollowingPlanet = true;
+                    userHasMovedCamera = false; // Reset flag
                 }
                 
                 // Interpolasi posisi kamera
@@ -258,6 +281,7 @@
         function resetCamera() {
             // Matikan mode follow
             isFollowingPlanet = false;
+            userHasMovedCamera = false;
             
             const startPos = camera.position.clone();
             const startTarget = controls.target.clone();
