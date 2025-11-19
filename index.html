@@ -73,6 +73,18 @@
         controls.enableDamping = true;
         controls.maxDistance = 500;
 
+        // --- Raycaster untuk deteksi klik ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let clickableObjects = [];
+        
+        // Simpan posisi kamera awal
+        const initialCameraPos = camera.position.clone();
+        const initialControlsTarget = new THREE.Vector3(0, 0, 0);
+        let currentZoomedObject = null;
+        let isFollowingPlanet = false;
+        let followOffset = new THREE.Vector3();
+
         // --- PENCAHAYAAN ---
         scene.add(new THREE.AmbientLight(0x555555)); 
         
@@ -84,7 +96,9 @@
             new THREE.SphereGeometry(3, 32, 32),
             new THREE.MeshBasicMaterial({ color: 0xFFD700 })
         );
+        sun.userData = { name: 'Matahari', isClickable: true };
         scene.add(sun);
+        clickableObjects.push(sun);
 
         // --- 2. Data Planet ---
         const planetsData = [
@@ -109,7 +123,9 @@
             // Roughness dikurangi sedikit (0.5) agar memantulkan lebih banyak cahaya
             const material = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.5 });
             const mesh = new THREE.Mesh(geometry, material);
+            mesh.userData = { name: data.name, isClickable: true };
             planetGroup.add(mesh);
+            clickableObjects.push(mesh);
 
             // Cincin (Saturnus)
             if (data.hasRing) {
@@ -170,9 +186,129 @@
                 p.objPlanet.rotation.y += 0.02;
             });
 
+            // Jika sedang mengikuti planet, update posisi kamera
+            if (isFollowingPlanet && currentZoomedObject) {
+                const worldPos = new THREE.Vector3();
+                currentZoomedObject.getWorldPosition(worldPos);
+                
+                // Update posisi kamera dan target untuk mengikuti planet
+                camera.position.copy(worldPos).add(followOffset);
+                controls.target.copy(worldPos);
+            }
+
             controls.update();
             renderer.render(scene, camera);
         }
+
+        // --- Fungsi Zoom ke Objek ---
+        function zoomToObject(object) {
+            // Hitung posisi world dari objek
+            const worldPos = new THREE.Vector3();
+            object.getWorldPosition(worldPos);
+            
+            // Tentukan jarak zoom berdasarkan ukuran objek (lebih jauh dari sebelumnya)
+            let distance;
+            if (object.userData.name === 'Matahari') {
+                distance = 25; // Lebih jauh dari 15
+            } else {
+                // Untuk planet, sesuaikan dengan size (lebih jauh)
+                const boundingSphere = object.geometry.boundingSphere;
+                distance = boundingSphere.radius * 10; // Lebih jauh dari 5
+            }
+            
+            // Hitung posisi kamera baru
+            const direction = new THREE.Vector3();
+            direction.subVectors(camera.position, worldPos).normalize();
+            
+            const targetCameraPos = new THREE.Vector3();
+            targetCameraPos.copy(worldPos).add(direction.multiplyScalar(distance));
+            
+            // Simpan offset untuk mengikuti planet
+            followOffset.copy(direction.multiplyScalar(distance));
+            
+            // Animasi smooth zoom
+            const startPos = camera.position.clone();
+            const startTarget = controls.target.clone();
+            let progress = 0;
+            
+            function animateZoom() {
+                progress += 0.05;
+                if (progress >= 1) {
+                    progress = 1;
+                    // Aktifkan mode follow setelah animasi selesai
+                    isFollowingPlanet = true;
+                }
+                
+                // Interpolasi posisi kamera
+                camera.position.lerpVectors(startPos, targetCameraPos, progress);
+                
+                // Interpolasi target controls
+                controls.target.lerpVectors(startTarget, worldPos, progress);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateZoom);
+                }
+            }
+            
+            animateZoom();
+            currentZoomedObject = object;
+        }
+
+        // --- Fungsi Kembali ke Posisi Awal ---
+        function resetCamera() {
+            // Matikan mode follow
+            isFollowingPlanet = false;
+            
+            const startPos = camera.position.clone();
+            const startTarget = controls.target.clone();
+            let progress = 0;
+            
+            function animateReset() {
+                progress += 0.05;
+                if (progress >= 1) progress = 1;
+                
+                // Interpolasi kembali ke posisi awal
+                camera.position.lerpVectors(startPos, initialCameraPos, progress);
+                controls.target.lerpVectors(startTarget, initialControlsTarget, progress);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateReset);
+                }
+            }
+            
+            animateReset();
+            currentZoomedObject = null;
+        }
+
+        // --- Event Listener untuk Klik ---
+        function onMouseClick(event) {
+            // Hitung posisi mouse dalam normalized device coordinates (-1 to +1)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Update raycaster
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Cari interseksi dengan objek yang bisa diklik
+            const intersects = raycaster.intersectObjects(clickableObjects);
+            
+            if (intersects.length > 0) {
+                const clickedObject = intersects[0].object;
+                if (clickedObject.userData.isClickable) {
+                    console.log('Klik pada:', clickedObject.userData.name);
+                    
+                    // Jika klik objek yang sama, kembali ke posisi awal
+                    if (currentZoomedObject === clickedObject) {
+                        resetCamera();
+                    } else {
+                        // Jika klik objek berbeda, zoom ke objek tersebut
+                        zoomToObject(clickedObject);
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('click', onMouseClick);
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
