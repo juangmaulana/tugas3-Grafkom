@@ -1,6 +1,64 @@
 import * as THREE from "three";
 
+// Function to create procedural textures
+function createProceduralTexture(baseColor, detailColor, pattern = 'noise') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  
+  // Fill base color
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, 512, 512);
+  
+  // Add texture details
+  if (pattern === 'noise') {
+    for (let i = 0; i < 5000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const size = Math.random() * 3;
+      ctx.fillStyle = detailColor;
+      ctx.globalAlpha = Math.random() * 0.5;
+      ctx.fillRect(x, y, size, size);
+    }
+  } else if (pattern === 'bands') {
+    for (let y = 0; y < 512; y += 2) {
+      ctx.fillStyle = detailColor;
+      ctx.globalAlpha = (Math.sin(y * 0.05) + 1) * 0.3;
+      ctx.fillRect(0, y, 512, 2);
+    }
+  } else if (pattern === 'clouds') {
+    for (let i = 0; i < 3000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const size = Math.random() * 8 + 2;
+      ctx.fillStyle = detailColor;
+      ctx.globalAlpha = Math.random() * 0.4;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export function createSunAndPlanets(scene, clickableObjects) {
+  // --- CREATE PROCEDURAL TEXTURES ---
+  const textures = {
+    sun: createProceduralTexture('#ffd700', '#ff8800', 'clouds'),
+    mercury: createProceduralTexture('#8c8c8c', '#606060', 'noise'),
+    venus: createProceduralTexture('#ffcc66', '#cc9944', 'clouds'),
+    earth: createProceduralTexture('#2255cc', '#118844', 'clouds'),
+    mars: createProceduralTexture('#dd5533', '#993322', 'noise'),
+    jupiter: createProceduralTexture('#ddaa77', '#bb8855', 'bands'),
+    saturn: createProceduralTexture('#ffe6b3', '#ddcc99', 'bands'),
+    uranus: createProceduralTexture('#66ddff', '#4499cc', 'noise'),
+    neptune: createProceduralTexture('#4466ff', '#3344aa', 'noise')
+  };
+
   // --- PENCAHAYAAN ---
   scene.add(new THREE.AmbientLight(0x222222));
 
@@ -18,7 +76,10 @@ export function createSunAndPlanets(scene, clickableObjects) {
   // Matahari
   const sun = new THREE.Mesh(
     new THREE.SphereGeometry(3, 32, 32),
-    new THREE.MeshBasicMaterial({ color: 0xffd700 })
+    new THREE.MeshBasicMaterial({ 
+      map: textures.sun,
+      color: 0xffd700 
+    })
   );
   sun.userData = { name: "Matahari", isClickable: true };
   sunLight.position.copy(sun.position);
@@ -28,14 +89,14 @@ export function createSunAndPlanets(scene, clickableObjects) {
 
   // --- Data Planet ---
   const planetsData = [
-    { name: "Merkurius", color: 0xc0c0c0, size: 0.4, a: 5, e: 0.205, speedBase: 0.06 },
-    { name: "Venus", color: 0xffe099, size: 0.6, a: 8, e: 0.007, speedBase: 0.045 },
-    { name: "Bumi", color: 0x4da6ff, size: 0.65, a: 11, e: 0.017, speedBase: 0.035 },
-    { name: "Mars", color: 0xff6b50, size: 0.5, a: 15, e: 0.093, speedBase: 0.028 },
-    { name: "Jupiter", color: 0xebc895, size: 1.8, a: 24, e: 0.048, speedBase: 0.015 },
-    { name: "Saturnus", color: 0xf7e6b0, size: 1.5, a: 32, e: 0.054, speedBase: 0.011, hasRing: true, ringTiltDeg: 27 },
-    { name: "Uranus", color: 0x85f0ff, size: 1.0, a: 40, e: 0.047, speedBase: 0.008 },
-    { name: "Neptunus", color: 0x6b80ff, size: 1.0, a: 48, e: 0.009, speedBase: 0.006 }
+    { name: "Merkurius", color: 0xc0c0c0, size: 0.4, a: 5, e: 0.205, speedBase: 0.06, texture: textures.mercury },
+    { name: "Venus", color: 0xffe099, size: 0.6, a: 8, e: 0.007, speedBase: 0.045, texture: textures.venus },
+    { name: "Bumi", color: 0x4da6ff, size: 0.65, a: 11, e: 0.017, speedBase: 0.035, texture: textures.earth },
+    { name: "Mars", color: 0xff6b50, size: 0.5, a: 15, e: 0.093, speedBase: 0.028, texture: textures.mars },
+    { name: "Jupiter", color: 0xebc895, size: 1.8, a: 24, e: 0.048, speedBase: 0.015, texture: textures.jupiter },
+    { name: "Saturnus", color: 0xf7e6b0, size: 1.5, a: 32, e: 0.054, speedBase: 0.011, hasRing: true, ringTiltDeg: 27, texture: textures.saturn },
+    { name: "Uranus", color: 0x85f0ff, size: 1.0, a: 40, e: 0.047, speedBase: 0.008, texture: textures.uranus },
+    { name: "Neptunus", color: 0x6b80ff, size: 1.0, a: 48, e: 0.009, speedBase: 0.006, texture: textures.neptune }
   ];
 
   const planetObjects = [];
@@ -45,7 +106,11 @@ export function createSunAndPlanets(scene, clickableObjects) {
     const planetGroup = new THREE.Group();
 
     const geometry = new THREE.SphereGeometry(data.size, 32, 32);
-    const material = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.5 });
+    const material = new THREE.MeshStandardMaterial({ 
+      map: data.texture,
+      color: data.color, 
+      roughness: 0.5 
+    });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData = { name: data.name, isClickable: true };
     mesh.userData.originalColor = mesh.material.color.clone();
@@ -71,6 +136,16 @@ export function createSunAndPlanets(scene, clickableObjects) {
       ring.receiveShadow = true;
     }
 
+    const orbitGroup = new THREE.Group();
+    
+    if (ENABLE_ORBIT_TILT) {
+      const maxTiltDeg = 5;
+      const tiltX = (Math.random() * 2 - 1) * maxTiltDeg * (Math.PI / 180);
+      const tiltZ = (Math.random() * 2 - 1) * maxTiltDeg * (Math.PI / 180);
+      orbitGroup.rotation.x = tiltX;
+      orbitGroup.rotation.z = tiltZ;
+    }
+    
     const points = [];
     const segments = 128;
     for (let i = 0; i <= segments; i++) {
@@ -83,18 +158,9 @@ export function createSunAndPlanets(scene, clickableObjects) {
     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
     const orbitMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.25, transparent: true });
     const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-
-    const orbitGroup = new THREE.Group();
-    orbitGroup.add(planetGroup);
+    
     orbitGroup.add(orbitLine);
-
-    if (ENABLE_ORBIT_TILT) {
-      const maxTiltDeg = 5;
-      const tiltX = (Math.random() * 2 - 1) * maxTiltDeg * (Math.PI / 180);
-      const tiltZ = (Math.random() * 2 - 1) * maxTiltDeg * (Math.PI / 180);
-      orbitGroup.rotation.x = tiltX;
-      orbitGroup.rotation.z = tiltZ;
-    }
+    orbitGroup.add(planetGroup);
 
     scene.add(orbitGroup);
 
