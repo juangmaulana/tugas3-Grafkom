@@ -1,346 +1,48 @@
 <!DOCTYPE html>
 <html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hukum Kepler</title>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 8px;
-            pointer-events: none;
-            max-width: 250px;
-            font-size: 12px;
-        }
-        h3 { margin-top: 0; color: #ffcc00; }
-        .legend { display: flex; align-items: center; margin-bottom: 4px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; display: inline-block; }
-    </style>
+    <link rel="stylesheet" href="style.css" />
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
         }
+      }
     </script>
-</head>
-<body>
-
+  </head>
+  <body>
     <div id="info">
-        <h3>Tata Surya</h3>
-        <div class="legend"><span class="dot" style="background: #C0C0C0;"></span>Merkurius</div>
-        <div class="legend"><span class="dot" style="background: #FFE099;"></span>Venus</div>
-        <div class="legend"><span class="dot" style="background: #4DA6FF;"></span>Bumi</div>
-        <div class="legend"><span class="dot" style="background: #FF6B50;"></span>Mars</div>
-        <div class="legend"><span class="dot" style="background: #EBC895;"></span>Jupiter</div>
-        <div class="legend"><span class="dot" style="background: #F7E6B0;"></span>Saturnus</div>
-        <div class="legend"><span class="dot" style="background: #85F0FF;"></span>Uranus</div>
-        <div class="legend"><span class="dot" style="background: #6B80FF;"></span>Neptunus</div>
+      <h3>Tata Surya</h3>
+      <div class="legend">
+        <span class="dot" style="background: #c0c0c0"></span>Merkurius
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: #ffe099"></span>Venus
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: #4da6ff"></span>Bumi
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: #ff6b50"></span>Mars
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: #ebc895"></span>Jupiter
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: #f7e6b0"></span>Saturnus
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: #85f0ff"></span>Uranus
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: #6b80ff"></span>Neptunus
+      </div>
     </div>
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-        // --- 1. Setup Scene ---
-        const scene = new THREE.Scene();
-        
-        // Bintang
-        const starGeo = new THREE.BufferGeometry();
-        const starCount = 5000;
-        const starPos = new Float32Array(starCount * 3);
-        for(let i=0; i<starCount*3; i++) starPos[i] = (Math.random() - 0.5) * 400;
-        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-        const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({color: 0xffffff, size: 0.2}));
-        scene.add(stars);
-
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
-        camera.position.set(0, 80, 100);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.maxDistance = 500;
-
-        // Event listener untuk deteksi pergerakan kamera oleh user
-        controls.addEventListener('start', () => {
-            if (isFollowingPlanet) {
-                userHasMovedCamera = true;
-            }
-        });
-
-        // --- Raycaster untuk deteksi klik ---
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-        let clickableObjects = [];
-        
-        // Simpan posisi kamera awal
-        const initialCameraPos = camera.position.clone();
-        const initialControlsTarget = new THREE.Vector3(0, 0, 0);
-        let currentZoomedObject = null;
-        let isFollowingPlanet = false;
-        let followOffset = new THREE.Vector3();
-        let userHasMovedCamera = false;
-
-        // --- PENCAHAYAAN ---
-        scene.add(new THREE.AmbientLight(0x555555)); 
-        
-        // Cahaya Matahari
-        scene.add(new THREE.PointLight(0xffffff, 2.5, 300));
-
-        // Matahari
-        const sun = new THREE.Mesh(
-            new THREE.SphereGeometry(3, 32, 32),
-            new THREE.MeshBasicMaterial({ color: 0xFFD700 })
-        );
-        sun.userData = { name: 'Matahari', isClickable: true };
-        scene.add(sun);
-        clickableObjects.push(sun);
-
-        // --- 2. Data Planet ---
-        const planetsData = [
-            { name: "Merkurius", color: 0xC0C0C0, size: 0.4, a: 5, e: 0.205, speedBase: 0.06 }, // Abu terang
-            { name: "Venus",     color: 0xFFE099, size: 0.6, a: 8, e: 0.007, speedBase: 0.045 }, // Kuning pucat terang
-            { name: "Bumi",      color: 0x4DA6FF, size: 0.65, a: 11, e: 0.017, speedBase: 0.035 }, // Biru langit
-            { name: "Mars",      color: 0xFF6B50, size: 0.5, a: 15, e: 0.093, speedBase: 0.028 }, // Merah tomat
-            { name: "Jupiter",   color: 0xEBC895, size: 1.8, a: 24, e: 0.048, speedBase: 0.015 }, // Krem kayu
-            { name: "Saturnus",  color: 0xF7E6B0, size: 1.5, a: 32, e: 0.054, speedBase: 0.011, hasRing: true }, // Kuning gading
-            { name: "Uranus",    color: 0x85F0FF, size: 1.0, a: 40, e: 0.047, speedBase: 0.008 }, // Cyan terang
-            { name: "Neptunus",  color: 0x6B80FF, size: 1.0, a: 48, e: 0.009, speedBase: 0.006 }  // Ungu kebiruan
-        ];
-
-        const planetObjects = [];
-
-        // --- 3. Fungsi Pembuat Planet ---
-        function createPlanet(data) {
-            const planetGroup = new THREE.Group();
-
-            // Mesh Planet
-            const geometry = new THREE.SphereGeometry(data.size, 32, 32);
-            // Roughness dikurangi sedikit (0.5) agar memantulkan lebih banyak cahaya
-            const material = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.5 });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.userData = { name: data.name, isClickable: true };
-            planetGroup.add(mesh);
-            clickableObjects.push(mesh);
-
-            // Cincin (Saturnus)
-            if (data.hasRing) {
-                const ringGeo = new THREE.RingGeometry(data.size + 0.4, data.size + 1.5, 64);
-                const ringMat = new THREE.MeshBasicMaterial({ 
-                    color: 0xFFF0D0, 
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 0.6
-                });
-                const ring = new THREE.Mesh(ringGeo, ringMat);
-                ring.rotation.x = -Math.PI / 2;
-                planetGroup.add(ring);
-            }
-
-            scene.add(planetGroup);
-
-            // Garis Orbit
-            const points = [];
-            const segments = 128;
-            for (let i = 0; i <= segments; i++) {
-                const angle = (i / segments) * Math.PI * 2;
-                const r = (data.a * (1 - data.e * data.e)) / (1 + data.e * Math.cos(angle));
-                const x = r * Math.cos(angle);
-                const z = r * Math.sin(angle);
-                points.push(new THREE.Vector3(x, 0, z));
-            }
-            const orbitLine = new THREE.Line(
-                new THREE.BufferGeometry().setFromPoints(points),
-                new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.25, transparent: true })
-            );
-            scene.add(orbitLine);
-
-            return {
-                mesh: planetGroup,
-                a: data.a,
-                e: data.e,
-                speedBase: data.speedBase,
-                theta: Math.random() * Math.PI * 2,
-                objPlanet: mesh
-            };
-        }
-
-        planetsData.forEach(data => {
-            planetObjects.push(createPlanet(data));
-        });
-
-        // --- 4. Loop Animasi ---
-        function animate() {
-            requestAnimationFrame(animate);
-
-            planetObjects.forEach(p => {
-                const r = (p.a * (1 - p.e * p.e)) / (1 + p.e * Math.cos(p.theta));
-                p.mesh.position.x = r * Math.cos(p.theta);
-                p.mesh.position.z = r * Math.sin(p.theta);
-                const dTheta = p.speedBase / (r * r);
-                p.theta += dTheta;
-                p.objPlanet.rotation.y += 0.02;
-            });
-
-            // Jika sedang mengikuti planet, update posisi kamera
-            if (isFollowingPlanet && currentZoomedObject && !userHasMovedCamera) {
-                const worldPos = new THREE.Vector3();
-                currentZoomedObject.getWorldPosition(worldPos);
-                
-                // Update posisi kamera dan target untuk mengikuti planet
-                camera.position.copy(worldPos).add(followOffset);
-                controls.target.copy(worldPos);
-            } else if (isFollowingPlanet && currentZoomedObject && userHasMovedCamera) {
-                // Jika user sudah menggerakkan kamera, hanya update target untuk mengikuti planet
-                const worldPos = new THREE.Vector3();
-                currentZoomedObject.getWorldPosition(worldPos);
-                controls.target.copy(worldPos);
-            }
-
-            controls.update();
-            renderer.render(scene, camera);
-        }
-
-        // --- Fungsi Zoom ke Objek ---
-        function zoomToObject(object) {
-            // Hitung posisi world dari objek
-            const worldPos = new THREE.Vector3();
-            object.getWorldPosition(worldPos);
-            
-            // Tentukan jarak zoom berdasarkan ukuran objek (lebih jauh dari sebelumnya)
-            let distance;
-            if (object.userData.name === 'Matahari') {
-                distance = 25;
-            } else {
-                // Untuk planet, sesuaikan dengan size (lebih jauh)
-                const boundingSphere = object.geometry.boundingSphere;
-                distance = boundingSphere.radius * 10;
-            }
-            
-            // Hitung arah dari matahari ke planet (untuk planet luar)
-            const directionFromSun = new THREE.Vector3();
-            directionFromSun.copy(worldPos).normalize();
-            
-            // Buat offset kamera: sedikit ke atas dan ke belakang dari arah orbit
-            const upVector = new THREE.Vector3(0, 1, 0);
-            const sideVector = new THREE.Vector3();
-            sideVector.crossVectors(directionFromSun, upVector).normalize();
-            
-            // Posisi kamera: di atas dan sedikit ke samping planet
-            const targetCameraPos = new THREE.Vector3();
-            targetCameraPos.copy(worldPos);
-            targetCameraPos.add(upVector.multiplyScalar(distance * 0.5)); // Ke atas
-            targetCameraPos.add(sideVector.multiplyScalar(distance * 0.8)); // Ke samping
-            targetCameraPos.add(directionFromSun.multiplyScalar(distance * 0.3)); // Sedikit ke depan
-            
-            // Simpan offset untuk mengikuti planet
-            followOffset.copy(targetCameraPos).sub(worldPos);
-            
-            // Animasi smooth zoom
-            const startPos = camera.position.clone();
-            const startTarget = controls.target.clone();
-            let progress = 0;
-            
-            function animateZoom() {
-                progress += 0.05;
-                if (progress >= 1) {
-                    progress = 1;
-                    // Aktifkan mode follow setelah animasi selesai
-                    isFollowingPlanet = true;
-                    userHasMovedCamera = false; // Reset flag
-                }
-                
-                // Interpolasi posisi kamera
-                camera.position.lerpVectors(startPos, targetCameraPos, progress);
-                
-                // Interpolasi target controls
-                controls.target.lerpVectors(startTarget, worldPos, progress);
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateZoom);
-                }
-            }
-            
-            animateZoom();
-            currentZoomedObject = object;
-        }
-
-        // --- Fungsi Kembali ke Posisi Awal ---
-        function resetCamera() {
-            // Matikan mode follow
-            isFollowingPlanet = false;
-            userHasMovedCamera = false;
-            
-            const startPos = camera.position.clone();
-            const startTarget = controls.target.clone();
-            let progress = 0;
-            
-            function animateReset() {
-                progress += 0.05;
-                if (progress >= 1) progress = 1;
-                
-                // Interpolasi kembali ke posisi awal
-                camera.position.lerpVectors(startPos, initialCameraPos, progress);
-                controls.target.lerpVectors(startTarget, initialControlsTarget, progress);
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateReset);
-                }
-            }
-            
-            animateReset();
-            currentZoomedObject = null;
-        }
-
-        // --- Event Listener untuk Klik ---
-        function onMouseClick(event) {
-            // Hitung posisi mouse dalam normalized device coordinates (-1 to +1)
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            // Update raycaster
-            raycaster.setFromCamera(mouse, camera);
-            
-            // Cari interseksi dengan objek yang bisa diklik
-            const intersects = raycaster.intersectObjects(clickableObjects);
-            
-            if (intersects.length > 0) {
-                const clickedObject = intersects[0].object;
-                if (clickedObject.userData.isClickable) {
-                    console.log('Klik pada:', clickedObject.userData.name);
-                    
-                    // Jika klik objek yang sama, kembali ke posisi awal
-                    if (currentZoomedObject === clickedObject) {
-                        resetCamera();
-                    } else {
-                        // Jika klik objek berbeda, zoom ke objek tersebut
-                        zoomToObject(clickedObject);
-                    }
-                }
-            }
-        }
-
-        window.addEventListener('click', onMouseClick);
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        animate();
-    </script>
-</body>
+    <script type="module" src="main.js"></script>
+  </body>
 </html>
